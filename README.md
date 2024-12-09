@@ -171,6 +171,16 @@ PRO (paid) feature "Smart Conflict" gives users one more option: merge small mar
 
 See documents [here](./docs/pro/README.md)
 
+### Enabling Smart Conflict for Testing
+
+To enable the Smart Conflict feature for testing without a valid PRO subscription, follow these steps:
+
+1. Open the settings for the Remotely Save plugin.
+2. Find the `enableSmartConflictForTesting` setting.
+3. Set `enableSmartConflictForTesting` to `true`.
+
+Please note that this is intended for testing purposes only and should not be used in a production environment.
+
 ## Scheduled Auto Sync
 
 - You can configure auto syncing every N minutes in settings.

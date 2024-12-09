@@ -256,6 +256,7 @@ export const checkProRunnableAndFixInplace = async (
   // check for smart_conflict
   if (config.conflictAction === "smart_conflict") {
     if (
+      config.enableSmartConflictForTesting ||
       config.pro.enabledProFeatures.filter(
         (x) => x.featureName === "feature-smart_conflict"
       ).length === 1

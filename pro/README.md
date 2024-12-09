@@ -14,6 +14,16 @@ Basic (free) version can detect conflicts, but users have to choose to keep newe
 
 PRO (paid) feature "Smart Conflict" gives users one more option: merge small markdown files, or duplicate large markdown files or non-markdown files.
 
+### Enabling Smart Conflict for Testing
+
+To enable the Smart Conflict feature for testing without a valid PRO subscription, follow these steps:
+
+1. Open the settings for the Remotely Save plugin.
+2. Find the `enableSmartConflictForTesting` setting.
+3. Set `enableSmartConflictForTesting` to `true`.
+
+Please note that this is intended for testing purposes only and should not be used in a production environment.
+
 ## Google Drive (GDrive) (PRO feature)
 
 PRO (paid) feature "sync with Google Drive" allows users to to sync with Google Drive. Tutorials and limitations are documented [here](../docs/remote_services/googledrive/README.md).

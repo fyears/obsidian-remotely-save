@@ -192,6 +192,8 @@ export interface RemotelySavePluginSettings {
 
   pro?: ProConfig;
 
+  enableSmartConflictForTesting?: boolean;
+
   /**
    * @deprecated
    */
