@@ -9,6 +9,9 @@
 ## 注意！！！
 
 坚果云有限制 api 数量等设定。本插件会产生若干查询，如果文件较多很容易触发 api 上限，从而工作不正常。这不是插件 bug，也没有办法解决。
+remotely-save 默认并发数是5，可以将其调到最低的1，有助于减少遇到频率限制的情况。
+<img width="942" alt="image" src="https://github.com/user-attachments/assets/ac0bd70f-d575-4f1a-8e79-1b839803566e" />
+
 
 ## 步骤
 
