@@ -180,7 +180,7 @@ const stripLeadingPath = (x: string) => {
   return y;
 };
 
-const getNormPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
+export const getNormPath = (fileOrFolderPath: string, remoteBaseDir: string) => {
   const strippedFileOrFolderPath = stripLeadingPath(fileOrFolderPath);
   if (
     !(

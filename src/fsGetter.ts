@@ -8,6 +8,7 @@ import { FakeFsYandexDisk } from "../pro/src/fsYandexDisk";
 import type { RemotelySavePluginSettings } from "./baseTypes";
 import type { FakeFs } from "./fsAll";
 import { FakeFsDropbox } from "./fsDropbox";
+import { FakeFsNutStore } from "./fsNutStore";
 import { FakeFsOnedrive } from "./fsOnedrive";
 import { FakeFsS3 } from "./fsS3";
 import { FakeFsWebdav } from "./fsWebdav";
@@ -25,6 +26,13 @@ export function getClient(
     case "s3":
       return new FakeFsS3(settings.s3);
     case "webdav":
+      if(settings.webdav.address.includes("jianguoyun.com")) {
+        return new FakeFsNutStore(
+          settings.webdav,
+          vaultName,
+          saveUpdatedConfigFunc
+        )
+      }
       return new FakeFsWebdav(
         settings.webdav,
         vaultName,
