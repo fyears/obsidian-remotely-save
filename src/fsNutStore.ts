@@ -30,17 +30,22 @@ const fromWebdavItemToEntity = (
   };
 };
 
+interface DeltaCache {
+  files: Entity[];
+  originCursor: string;
+  deltas: DeltaResponse[];
+}
+
 const deltaCache = localforage.createInstance({
   name: DEFAULT_DB_NAME,
   storeName: DEFAULT_TBL_NUTSTORE_DELTA_CACHE,
 });
 
 const getDeltaCache = async (baseDir: string) => {
-  const res = await deltaCache.getItem<DeltaResponse[]>(baseDir);
-  return res ?? [];
+  return await deltaCache.getItem<DeltaCache>(baseDir);
 };
 
-const setDeltaCache = (baseDir: string, deltas: DeltaResponse[]) => {
+const setDeltaCache = (baseDir: string, deltas: DeltaCache) => {
   return deltaCache.setItem(baseDir, deltas);
 };
 
@@ -62,7 +67,7 @@ interface DeltaResponse {
   };
 }
 
-function NSAPI(name: "delta") {
+function NSAPI(name: "delta" | "latestDeltaCursor") {
   return `https://dav.jianguoyun.com/nsdav/${name}`;
 }
 
@@ -111,7 +116,12 @@ const getDelta = limiter.wrap(
     if (!isNil(result?.response?.cursor)) {
       result.response.cursor = result.response.cursor.toString();
     }
-    if (!result.response.delta) {
+    if (result.response.delta) {
+        const entry = result.response.delta.entry
+        if(!Array.isArray(entry)) {
+            result.response.delta.entry = [entry]
+        }
+    }else{
       result.response.delta = {
         entry: [],
       };
@@ -120,90 +130,111 @@ const getDelta = limiter.wrap(
   }
 );
 
-async function getDeltasFromRemote(options: GetDeltaInput) {
-  let deltas = await getDeltaCache(options.folderName);
-  let cursor: string | undefined = undefined;
-  if (deltas.length > 0) {
-    const cachedFirstDelta = deltas[0];
-    if (cachedFirstDelta.hasMore) {
-      const { response: remoteFirstDelta } = await getDelta(options);
-      if (!isEqual(remoteFirstDelta, cachedFirstDelta)) {
-        deltas = [remoteFirstDelta];
-        if (!remoteFirstDelta.hasMore) {
-          return deltas;
-        }
-      }
-    }
-    const d = deltas.at(-1);
-    if (d?.hasMore) {
-      cursor = d.cursor;
-    } else {
-      cursor = deltas.at(-2)?.cursor;
-    }
-  }
-  while (true) {
-    const events = await getDelta(options);
-    if (events.response.cursor === cursor) {
-      break;
-    }
-    if (events.response.reset) {
-      cursor = undefined;
-      deltas = [];
-      continue;
-    }
-    if (deltas.length === 0) {
-      deltas.push(events.response);
-    } else if (isNil(cursor)) {
-      deltas = [events.response];
-    } else {
-      const cursorIdx = deltas.findIndex((d) => d.cursor === cursor);
-      if (cursorIdx === -1) {
-        throw new Error(`Unknown cursor: ${cursor}`);
-      }
-      deltas.splice(
-        cursorIdx + 1,
-        deltas.length - cursorIdx - 1,
-        events.response
-      );
-    }
-    if (events.response.hasMore) {
-      cursor = events.response.cursor;
-    } else {
-      break;
-    }
-  }
-  return deltas;
+interface GetLatestDeltaCursorInput {
+  folderName: string;
+  username: string;
+  password: string;
 }
+
+const getLatestDeltaCursor = limiter.wrap(
+  async ({ folderName, username, password }: GetLatestDeltaCursorInput) => {
+    const body = `<?xml version="1.0" encoding="utf-8"?>
+            <s:delta xmlns:s="http://ns.jianguoyun.com">
+                <s:folderName>${folderName}</s:folderName>
+            </s:delta>`;
+    const token = encodeToken(username, password);
+    const headers = {
+      Authorization: `Basic ${token}`,
+      "Content-Type": "application/xml",
+    };
+    const response = await requestUrl({
+      url: NSAPI("latestDeltaCursor"),
+      method: "POST",
+      headers,
+      body,
+    });
+    const result = parseXml<{
+      response: {
+        cursor: string;
+      };
+    }>(response.text);
+    return result;
+  }
+);
 
 export class FakeFsNutStore extends FakeFsWebdav {
   async walk(): Promise<Entity[]> {
     await this._init();
-
-    const deltas = await getDeltasFromRemote({
-      folderName: this.remoteBaseDir,
+    const auth = {
       username: this.webdavConfig.username,
       password: this.webdavConfig.password,
-    });
-    await setDeltaCache(this.remoteBaseDir, deltas);
-    const res: Omit<FileStat, "etag">[] = [];
-    const deltasMap = new Map(
-      deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d]))
-    );
-    for (const item of deltasMap.values()) {
-      if (item.isDeleted) {
-        continue;
+    };
+    let deltaCache = await getDeltaCache(this.remoteBaseDir);
+    if (deltaCache) {
+      let cursor = deltaCache.deltas.at(-1)?.cursor ?? deltaCache.originCursor;
+      while (true) {
+        const events = await getDelta({
+          ...auth,
+          cursor,
+          folderName: this.remoteBaseDir,
+        });
+        if (events.response.cursor === cursor) {
+          break;
+        }
+        if (events.response.reset) {
+          deltaCache.deltas = [];
+          deltaCache.files = await super.walk();
+          cursor = await getLatestDeltaCursor({
+            ...auth,
+            folderName: this.remoteBaseDir,
+          }).then((d) => d?.response?.cursor);
+        } else if (events.response.delta.entry.length > 0) {
+          deltaCache.deltas.push(events.response);
+          if (events.response.hasMore) {
+            cursor = events.response.cursor;
+          } else {
+            break
+          }
+        } else {
+          break;
+        }
       }
-      res.push({
-        filename: item.path,
-        basename: dirname(item.path),
-        lastmod: item.modified,
-        type: item.isDir ? "directory" : "file",
-        size: item.size,
+    } else {
+      const files = await super.walk();
+      const {
+        response: { cursor: originCursor },
+      } = await getLatestDeltaCursor({
+        ...auth,
+        folderName: this.remoteBaseDir,
       });
+      deltaCache = {
+        files,
+        originCursor,
+        deltas: [],
+      };
     }
-
-    return res
-      .map((x) => fromWebdavItemToEntity(x, this.remoteBaseDir))
-      .filter((x) => x.keyRaw !== "/");
+    await setDeltaCache(this.remoteBaseDir, deltaCache);
+    const deltasMap = new Map(
+      deltaCache.deltas.flatMap((d) => d.delta.entry.map((d) => [d.path, d]))
+    );
+    const filesMap = new Map(deltaCache.files.map((d) => [d.key, d]));
+    for (const delta of deltasMap.values()) {
+      const entity = fromWebdavItemToEntity(
+        {
+          filename: delta.path,
+          lastmod: delta.modified,
+          type: delta.isDir ? "directory" : "file",
+          basename: dirname(delta.path),
+          size: delta.size,
+        },
+        this.remoteBaseDir
+      );
+      if (delta.isDeleted) {
+        filesMap.delete(entity.key);
+      } else {
+        filesMap.set(entity.key, entity);
+      }
+    }
+    return [...filesMap.values()].filter((x) => x.keyRaw !== "/");
   }
 }
