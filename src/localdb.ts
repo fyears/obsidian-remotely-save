@@ -21,6 +21,7 @@ export const DEFAULT_TBL_SIMPLE_KV_FOR_MISC = "simplekvformisc";
 export const DEFAULT_TBL_PREV_SYNC_RECORDS = "prevsyncrecords";
 export const DEFAULT_TBL_PROFILER_RESULTS = "profilerresults";
 export const DEFAULT_TBL_FILE_CONTENT_HISTORY = "filecontenthistory";
+export const DEFAULT_TBL_NUTSTORE_DELTA_CACHE = "nutstoreDeltaCache";
 
 /**
  * @deprecated
